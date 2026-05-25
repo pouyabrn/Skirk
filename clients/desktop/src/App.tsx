@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import qrcode from "qrcode-generator";
 import {
   Check,
   ClipboardPaste,
@@ -14,6 +15,7 @@ import {
   Network,
   Play,
   Power,
+  QrCode,
   RefreshCw,
   Server,
   SlidersHorizontal,
@@ -38,7 +40,7 @@ import logoMark from "./assets/logo-mark.png";
 import packageInfo from "../package.json";
 
 type Theme = "light" | "dark";
-type BusyAction = "connect" | "disconnect" | "import" | "select" | "delete" | "mode" | "performance";
+type BusyAction = "connect" | "disconnect" | "import" | "select" | "delete" | "mode" | "performance" | "qr";
 const APP_VERSION = packageInfo.version;
 const DRIVE_USER_UNITS_PER_MINUTE = 325_000;
 const DRIVE_LIST_UNITS = 100;
@@ -60,6 +62,7 @@ function App() {
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const [copyStatus, setCopyStatus] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [qrDialog, setQrDialog] = useState<{ title: string; svg: string; characters: number } | null>(null);
   const profileNameId = useId();
   const socksPortId = useId();
   const httpPortId = useId();
@@ -215,6 +218,40 @@ function App() {
       return;
     }
     await run("performance", () => desktopApi.updateProfilePerformance(selectedProfile.id, next));
+  }
+
+  async function showProfileQR(profile: ClientProfile) {
+    setBusyAction("qr");
+    try {
+      const text = await desktopApi.profileConfigText(profile.id);
+      setQrDialog({
+        title: profile.name,
+        svg: makeProfileQRCode(text),
+        characters: text.length,
+      });
+      setError("");
+    } catch (nextError) {
+      setError(normalizeError(nextError));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function showImportQR() {
+    const text = rawConfig.trim();
+    if (!text) {
+      return;
+    }
+    try {
+      setQrDialog({
+        title: profileName.trim() || "Skirk profile",
+        svg: makeProfileQRCode(text),
+        characters: text.length,
+      });
+      setError("");
+    } catch (nextError) {
+      setError(normalizeError(nextError));
+    }
   }
 
   return (
@@ -420,7 +457,9 @@ function App() {
                     profile={profile}
                     selected={profile.id === selectedProfile?.id}
                     disabled={runtimeBusy || connected}
+                    qrDisabled={runtimeBusy}
                     onSelect={() => void run("select", () => desktopApi.selectProfile(profile.id))}
+                    onShowQR={() => void showProfileQR(profile)}
                     onDelete={() => void run("delete", () => desktopApi.deleteProfile(profile.id))}
                   />
                 ))
@@ -528,6 +567,10 @@ function App() {
                   <ClipboardPaste />
                   Paste
                 </button>
+                <button type="button" disabled={busy || rawConfig.trim() === ""} onClick={showImportQR}>
+                  <QrCode />
+                  Show QR
+                </button>
               </div>
             </div>
           </details>
@@ -561,6 +604,12 @@ function App() {
             busy={busyAction === "performance"}
             onClose={() => setAdvancedOpen(false)}
             onChange={(next) => void updatePerformance(next)}
+          />
+        ) : null}
+        {qrDialog ? (
+          <ProfileQRDialog
+            dialog={qrDialog}
+            onClose={() => setQrDialog(null)}
           />
         ) : null}
       </main>
@@ -616,13 +665,17 @@ function ProfileRow({
   profile,
   selected,
   disabled,
+  qrDisabled,
   onSelect,
+  onShowQR,
   onDelete,
 }: {
   profile: ClientProfile;
   selected: boolean;
   disabled: boolean;
+  qrDisabled: boolean;
   onSelect: () => void;
+  onShowQR: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -645,6 +698,16 @@ function ProfileRow({
         <span>
           {profile.routeMode} · {profileRowDetail(profile)}
         </span>
+      </button>
+      <button
+        type="button"
+        className="icon-button"
+        disabled={qrDisabled}
+        onClick={onShowQR}
+        aria-label={`Show QR code for ${profile.name}`}
+        title="Show QR code"
+      >
+        <QrCode aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -787,6 +850,46 @@ function AdvancedSettingsDialog({
             onChange={onChange}
           />
         </section>
+      </section>
+    </div>
+  );
+}
+
+function ProfileQRDialog({
+  dialog,
+  onClose,
+}: {
+  dialog: { title: string; svg: string; characters: number };
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="profile-qr-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-qr-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <span className="eyebrow">Profile QR</span>
+            <h2 id="profile-qr-title">{dialog.title}</h2>
+          </div>
+          <button type="button" className="icon-button" aria-label="Close profile QR" onClick={onClose}>
+            <X />
+          </button>
+        </header>
+
+        <div
+          className="profile-qr-code"
+          aria-label={`QR code for ${dialog.title}`}
+          dangerouslySetInnerHTML={{ __html: dialog.svg }}
+        />
+        <div className="warning-note">
+          This QR contains the full client profile. Treat it like a password.
+        </div>
+        <small className="profile-qr-meta">{dialog.characters.toLocaleString()} characters</small>
       </section>
     </div>
   );
@@ -1198,6 +1301,19 @@ function combinedLogs(snapshot: DesktopSnapshot | null) {
     parts.push(`[vpn]\n${snapshot.tunnelLogTail}`);
   }
   return parts.join("\n\n") || "No log output yet.";
+}
+
+function makeProfileQRCode(text: string) {
+  try {
+    const qr = qrcode(0, "L");
+    qr.addData(text);
+    qr.make();
+    return qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
+  } catch (error) {
+    throw new Error(
+      `Profile is too large for a QR code. Use the one-line skirk: profile instead of client.json. ${normalizeError(error)}`,
+    );
+  }
 }
 
 function runtimeMessage(connected: boolean, profile?: ClientProfile) {

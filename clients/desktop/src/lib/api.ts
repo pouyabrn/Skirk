@@ -194,6 +194,7 @@ const tauriApi = {
   loadSnapshot: () => invoke<DesktopSnapshot>("load_snapshot"),
   importConfig: (name: string, rawConfig: string, socksPort: number, httpPort: number, shareLan: boolean) =>
     invoke<DesktopSnapshot>("import_config", { name, rawConfig, socksPort, httpPort, shareLan }),
+  profileConfigText: (profileId: string) => invoke<string>("profile_config_text", { profileId }),
   deleteProfile: (profileId: string) => invoke<DesktopSnapshot>("delete_profile", { profileId }),
   selectProfile: (profileId: string | null) =>
     invoke<DesktopSnapshot>("select_profile", { profileId }),
@@ -229,6 +230,7 @@ const browserPreviewApi = {
     mockSelectedProfileId = id;
     return mockSnapshot();
   },
+  profileConfigText: async (_profileId: string) => "skirk:mock-profile-config-for-qr",
   deleteProfile: async (profileId: string) => {
     mockProfiles = mockProfiles.filter((profile) => profile.id !== profileId);
     if (mockSelectedProfileId === profileId) {

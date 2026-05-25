@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.DataUsage
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shield
@@ -96,6 +97,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.delay
 import java.io.File
 import org.json.JSONObject
@@ -224,6 +228,13 @@ fun ConfigScreen() {
             message = "VPN permission was not granted"
         }
     }
+    val qrScanner = remember(context) {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build()
+        GmsBarcodeScanning.getClient(context, options)
+    }
 
     fun refresh() {
         profiles = store.listProfiles()
@@ -309,6 +320,28 @@ fun ConfigScreen() {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         rawConfig = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
         importError = ""
+    }
+
+    fun scanProfileFromQRCode() {
+        qrScanner.startScan()
+            .addOnSuccessListener { barcode ->
+                val scanned = barcode.rawValue.orEmpty().trim()
+                if (scanned.isBlank()) {
+                    importError = "QR code did not contain a Skirk profile"
+                    message = importError
+                    Toast.makeText(context, importError, Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+                rawConfig = scanned
+                importError = ""
+                message = "Scanned profile QR"
+            }
+            .addOnFailureListener { error ->
+                val nextError = error.message ?: "QR scan failed"
+                importError = nextError
+                message = nextError
+                Toast.makeText(context, nextError, Toast.LENGTH_LONG).show()
+            }
     }
 
     fun importProfile() {
@@ -405,6 +438,7 @@ fun ConfigScreen() {
                             rawConfig = it
                             importError = ""
                         },
+                        onScan = ::scanProfileFromQRCode,
                         onPaste = ::pasteProfileFromClipboard,
                         onImport = ::importProfile,
                     )
@@ -445,6 +479,7 @@ fun ConfigScreen() {
                                 rawConfig = it
                                 importError = ""
                             },
+                            onScan = ::scanProfileFromQRCode,
                             onPaste = ::pasteProfileFromClipboard,
                             onImport = ::importProfile,
                         )
@@ -986,6 +1021,7 @@ private fun ImportPanel(
     onSocksPortChange: (String) -> Unit,
     onHttpPortChange: (String) -> Unit,
     onRawConfigChange: (String) -> Unit,
+    onScan: () -> Unit,
     onPaste: () -> Unit,
     onImport: () -> Unit,
 ) {
@@ -1002,14 +1038,18 @@ private fun ImportPanel(
                 if (importError.isNotBlank()) {
                     Text(importError)
                 } else {
-                    Text("Paste the one-line skirk: profile or generated client.json.")
+                    Text("Paste or scan the one-line skirk: profile or generated client.json.")
                 }
             },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Button(
                 onClick = onImport,
                 enabled = rawConfig.isNotBlank(),
+                modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -1018,7 +1058,16 @@ private fun ImportPanel(
                 Icon(Icons.Rounded.Add, contentDescription = null)
                 Text("Import")
             }
-            OutlinedButton(onClick = onPaste) {
+            OutlinedButton(onClick = onScan, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Rounded.QrCodeScanner, contentDescription = null)
+                Text("Scan QR")
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OutlinedButton(onClick = onPaste, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Rounded.ContentPaste, contentDescription = null)
                 Text("Paste")
             }

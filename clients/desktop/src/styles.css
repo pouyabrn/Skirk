@@ -831,7 +831,7 @@ details[open] > .disclosure-summary::after {
 .profile-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 36px;
+  grid-template-columns: minmax(0, 1fr) 36px 36px;
   gap: 8px;
   align-items: start;
 }
@@ -1089,6 +1089,49 @@ details[open] > .disclosure-summary::after {
   justify-content: space-between;
   gap: 14px;
   align-items: flex-start;
+}
+
+.profile-qr-dialog {
+  width: min(420px, 100%);
+  max-height: min(82vh, 700px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.profile-qr-dialog > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.profile-qr-dialog h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-qr-code {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 12px;
+}
+
+.profile-qr-code svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.profile-qr-meta {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .advanced-section {

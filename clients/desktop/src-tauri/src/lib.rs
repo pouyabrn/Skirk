@@ -516,6 +516,21 @@ impl DesktopRuntime {
         )
     }
 
+    fn profile_config_text(&self, profile_id: &str) -> Result<String, String> {
+        let profiles = load_profiles(&self.paths)?;
+        let profile = profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .ok_or_else(|| "profile was not found".to_string())?;
+        let text = fs::read_to_string(&profile.config_path)
+            .map_err(|error| format!("failed to read profile config: {error}"))?;
+        let text = text.trim().to_string();
+        if text.is_empty() {
+            return Err("profile config is empty".into());
+        }
+        Ok(text)
+    }
+
     fn decode_config(&self, raw_config: &str) -> Result<Value, String> {
         if let Some(inline_config) = extract_inline_config(raw_config) {
             let skirk = self.resolve_sidecar()?;
@@ -1745,6 +1760,14 @@ async fn import_config(
 }
 
 #[tauri::command]
+async fn profile_config_text(
+    runtime: State<'_, DesktopRuntime>,
+    profile_id: String,
+) -> Result<String, String> {
+    runtime.profile_config_text(&profile_id)
+}
+
+#[tauri::command]
 async fn delete_profile(
     runtime: State<'_, DesktopRuntime>,
     profile_id: String,
@@ -1805,6 +1828,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_snapshot,
             import_config,
+            profile_config_text,
             delete_profile,
             select_profile,
             set_connection_mode,
